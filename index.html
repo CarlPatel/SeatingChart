@@ -21,7 +21,6 @@
       text-align: center;
     }
     h1 {
-      text-align: center;
       color: #4CAF50;
     }
     label[for="students"] {
@@ -39,7 +38,7 @@
       font-size: 1em;
       margin: 0 auto;
       display: block;
-      text-align: center;
+      text-align: left; /* Content aligned to left */
     }
     /* Counter styling */
     #nameCount {
@@ -109,11 +108,12 @@
       overflow: hidden;
       border-radius: 4px;
     }
+    /* Fixed width for groups */
     .group {
       border: 2px solid #666;
       margin: 10px;
       padding: 10px;
-      display: inline-block;
+      width: 150px;
       border-radius: 6px;
       text-align: center;
     }
@@ -121,11 +121,17 @@
       font-weight: bold;
       margin-bottom: 5px;
     }
+    /* Vertical layout for seats within a group */
+    .group-seats {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 10px;
+      align-items: center;
+    }
     @media print {
       .no-print { display: none; }
-      .seat {
-        cursor: default;
-      }
+      .seat { cursor: default; }
     }
   </style>
 </head>
@@ -135,7 +141,7 @@
     <div class="no-print">
       <label for="students">Enter student names (one per line):</label>
       <textarea id="students" placeholder="Student 1&#10;Student 2&#10;Student 3"></textarea>
-      <div id="nameCount">Students: 0</div>
+      <div id="nameCount">Student Count: 0</div>
       
       <div class="options">
         <label>
@@ -173,7 +179,7 @@
                       .split('\n')
                       .map(s => s.trim())
                       .filter(s => s !== "");
-      nameCountDiv.textContent = "Students: " + names.length;
+      nameCountDiv.textContent = "Student Count: " + names.length;
     });
     
     const layoutRadios = document.getElementsByName('layout');
@@ -208,7 +214,6 @@
         const rows = parseInt(document.getElementById('rows').value);
         const cols = parseInt(document.getElementById('columns').value);
         const totalSeats = rows * cols;
-        // If more students than available seats, show error
         if (students.length > totalSeats) {
           const extra = students.length - totalSeats;
           alert("Error: There are " + extra + " more student(s) than available seats.");
@@ -226,6 +231,9 @@
         chartDiv.style.maxWidth = (cols * 110) + 'px';
         chartDiv.style.margin = "20px auto 0";
       } else if (layout === 'groups') {
+        // Reset grid-specific inline styles
+        chartDiv.style.maxWidth = "";
+        chartDiv.style.margin = "";
         const groupSize = parseInt(document.getElementById('groupSize').value);
         const totalGroups = Math.ceil(students.length / groupSize);
         for (let g = 0; g < totalGroups; g++) {
@@ -235,6 +243,10 @@
           header.classList.add('group-title');
           header.textContent = 'Group ' + (g + 1);
           groupDiv.appendChild(header);
+          
+          // Vertical container for group seats
+          const seatsContainer = document.createElement('div');
+          seatsContainer.classList.add('group-seats');
           
           const start = g * groupSize;
           const end = start + groupSize;
@@ -246,8 +258,9 @@
             seatDiv.id = 'group-' + g + '-seat-' + idx;
             seatDiv.textContent = student;
             addDragDropHandlers(seatDiv);
-            groupDiv.appendChild(seatDiv);
+            seatsContainer.appendChild(seatDiv);
           });
+          groupDiv.appendChild(seatsContainer);
           chartDiv.appendChild(groupDiv);
         }
       }
