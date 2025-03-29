@@ -41,6 +41,13 @@
       display: block;
       text-align: center;
     }
+    /* Counter styling */
+    #nameCount {
+      width: 60%;
+      margin: 10px auto;
+      font-weight: bold;
+      text-align: center;
+    }
     .options {
       margin-top: 10px;
     }
@@ -128,6 +135,7 @@
     <div class="no-print">
       <label for="students">Enter student names (one per line):</label>
       <textarea id="students" placeholder="Student 1&#10;Student 2&#10;Student 3"></textarea>
+      <div id="nameCount">Students: 0</div>
       
       <div class="options">
         <label>
@@ -157,6 +165,17 @@
   </div>
   
   <script>
+    // Update name counter on textarea input
+    const studentTextarea = document.getElementById('students');
+    const nameCountDiv = document.getElementById('nameCount');
+    studentTextarea.addEventListener('input', () => {
+      const names = studentTextarea.value
+                      .split('\n')
+                      .map(s => s.trim())
+                      .filter(s => s !== "");
+      nameCountDiv.textContent = "Students: " + names.length;
+    });
+    
     const layoutRadios = document.getElementsByName('layout');
     const gridOptions = document.getElementById('grid-options');
     const groupOptions = document.getElementById('group-options');
@@ -171,8 +190,8 @@
     updateOptions();
     
     document.getElementById('generate').addEventListener('click', () => {
-      const studentInput = document.getElementById('students').value;
-      let students = studentInput.split('\n').map(s => s.trim()).filter(s => s);
+      const studentInput = studentTextarea.value;
+      let students = studentInput.split('\n').map(s => s.trim()).filter(s => s !== "");
       if (students.length === 0) {
         alert('Please enter at least one student.');
         return;
