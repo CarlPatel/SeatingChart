@@ -189,6 +189,12 @@
         const rows = parseInt(document.getElementById('rows').value);
         const cols = parseInt(document.getElementById('columns').value);
         const totalSeats = rows * cols;
+        // If more students than available seats, show error
+        if (students.length > totalSeats) {
+          const extra = students.length - totalSeats;
+          alert("Error: There are " + extra + " more student(s) than available seats.");
+          return;
+        }
         for (let i = 0; i < totalSeats; i++) {
           const seatDiv = document.createElement('div');
           seatDiv.classList.add('seat');
@@ -198,7 +204,6 @@
           addDragDropHandlers(seatDiv);
           chartDiv.appendChild(seatDiv);
         }
-        // Set a max-width for grid and center it
         chartDiv.style.maxWidth = (cols * 110) + 'px';
         chartDiv.style.margin = "20px auto 0";
       } else if (layout === 'groups') {
