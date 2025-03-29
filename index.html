@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Seating Chart</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+    }
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    textarea {
+      width: 100%;
+      height: 150px;
+    }
+    .options {
+      margin-top: 10px;
+    }
+    .seating-chart {
+      margin-top: 20px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .seat {
+      border: 1px solid #333;
+      background-color: #f9f9f9;
+      cursor: move;
+      /* Fixed size */
+      width: 100px;
+      height: 60px;
+      box-sizing: border-box;
+      padding: 5px;
+      /* Center content */
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      /* Allow text wrapping and limit to 2 lines */
+      white-space: normal;
+      line-height: 1.2;
+      overflow: hidden;
+    }
+    /* Group view styling */
+    .group {
+      border: 2px solid #666;
+      margin: 10px;
+      padding: 10px;
+      display: inline-block;
+    }
+    .group-title {
+      font-weight: bold;
+      margin-bottom: 5px;
+    }
+    /* Hide inputs when not needed */
+    .extra-input {
+      display: none;
+      margin-top: 5px;
+    }
+    /* Print styling */
+    @media print {
+      .no-print { display: none; }
+      .seat {
+        cursor: default;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Seating Chart Generator</h1>
+    <div class="no-print">
+      <label for="students">Enter student names (one per line):</label><br>
+      <textarea id="students" placeholder="Student 1&#10;Student 2&#10;Student 3"></textarea>
+      
+      <div class="options">
+        <label>
+          <input type="radio" name="layout" value="grid" checked>
+          Rows and Columns
+        </label>
+        <label>
+          <input type="radio" name="layout" value="groups">
+          Groups
+        </label>
+      </div>
+      
+      <div id="grid-options" class="extra-input">
+        <label>Rows: <input type="number" id="rows" min="1" value="3"></label>
+        <label>Columns: <input type="number" id="columns" min="1" value="4"></label>
+      </div>
+      
+      <div id="group-options" class="extra-input">
+        <label>Group Size: <input type="number" id="groupSize" min="1" value="3"></label>
+      </div>
+      
+      <button id="generate">Generate Seating Chart</button>
+      <button id="printBtn">Print/Export</button>
+    </div>
+    
+    <div id="chart" class="seating-chart"></div>
+  </div>
+  
+  <script>
+    // Toggle additional options based on selected layout
+    const layoutRadios = document.getElementsByName('layout');
+    const gridOptions = document.getElementById('grid-options');
+    const groupOptions = document.getElementById('group-options');
+    
+    function updateOptions() {
+      const layout = document.querySelector('input[name="layout"]:checked').value;
+      if (layout === 'grid') {
+        gridOptions.style.display = 'block';
+        groupOptions.style.display = 'none';
+      } else {
+        gridOptions.style.display = 'none';
+        groupOptions.style.display = 'block';
+      }
+    }
+    
+    layoutRadios.forEach(radio => radio.addEventListener('change', updateOptions));
+    updateOptions();
+    
+    // Generate seating chart based on input and layout
+    document.getElementById('generate').addEventListener('click', () => {
+      const studentInput = document.getElementById('students').value;
+      let students = studentInput.split('\n').map(s => s.trim()).filter(s => s);
+      if (students.length === 0) {
+        alert('Please enter at least one student.');
+        return;
+      }
+      
+      // Shuffle students randomly
+      students = students.sort(() => Math.random() - 0.5);
+      
+      const layout = document.querySelector('input[name="layout"]:checked').value;
+      const chartDiv = document.getElementById('chart');
+      chartDiv.innerHTML = ''; // clear previous chart
+      
+      if (layout === 'grid') {
+        const rows = parseInt(document.getElementById('rows').value);
+        const cols = parseInt(document.getElementById('columns').value);
+        const totalSeats = rows * cols;
+        // If more seats than students, fill empty seats with blank values.
+        for (let i = 0; i < totalSeats; i++) {
+          const seatDiv = document.createElement('div');
+          seatDiv.classList.add('seat');
+          seatDiv.draggable = true;
+          seatDiv.id = 'seat-' + i;
+          seatDiv.textContent = students[i] || '';
+          addDragDropHandlers(seatDiv);
+          chartDiv.appendChild(seatDiv);
+        }
+        // Set chartDiv width based on columns
+        chartDiv.style.flexDirection = 'row';
+        chartDiv.style.flexWrap = 'wrap';
+        chartDiv.style.maxWidth = (cols * 110) + 'px'; // 110px including gap
+      } else if (layout === 'groups') {
+        const groupSize = parseInt(document.getElementById('groupSize').value);
+        const totalGroups = Math.ceil(students.length / groupSize);
+        for (let g = 0; g < totalGroups; g++) {
+          const groupDiv = document.createElement('div');
+          groupDiv.classList.add('group');
+          // Group header
+          const header = document.createElement('div');
+          header.classList.add('group-title');
+          header.textContent = 'Group ' + (g + 1);
+          groupDiv.appendChild(header);
+          
+          // Create group members
+          const start = g * groupSize;
+          const end = start + groupSize;
+          const groupStudents = students.slice(start, end);
+          groupStudents.forEach((student, idx) => {
+            const seatDiv = document.createElement('div');
+            seatDiv.classList.add('seat');
+            seatDiv.draggable = true;
+            seatDiv.id = 'group-' + g + '-seat-' + idx;
+            seatDiv.textContent = student;
+            addDragDropHandlers(seatDiv);
+            groupDiv.appendChild(seatDiv);
+          });
+          chartDiv.appendChild(groupDiv);
+        }
+      }
+    });
+    
+    // Add drag and drop functionality to a seat element
+    function addDragDropHandlers(el) {
+      el.addEventListener('dragstart', dragStart);
+      el.addEventListener('dragover', dragOver);
+      el.addEventListener('drop', drop);
+      el.addEventListener('dragend', dragEnd);
+    }
+    
+    let draggedElement = null;
+    
+    function dragStart(e) {
+      draggedElement = this;
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", this.id);
+      this.style.opacity = '0.4';
+    }
+    
+    function dragOver(e) {
+      e.preventDefault();
+      return false;
+    }
+    
+    function drop(e) {
+      e.stopPropagation();
+      if (draggedElement !== this) {
+        let temp = this.textContent;
+        this.textContent = draggedElement.textContent;
+        draggedElement.textContent = temp;
+      }
+      return false;
+    }
+    
+    function dragEnd(e) {
+      this.style.opacity = '1';
+    }
+    
+    // Print/Export button: triggers the browser's print dialog.
+    document.getElementById('printBtn').addEventListener('click', () => {
+      window.print();
+    });
+  </script>
+</body>
+</html>
