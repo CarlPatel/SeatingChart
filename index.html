@@ -152,9 +152,11 @@
       .no-print {
         display: none;
       }
+
       .seat {
         cursor: default;
       }
+
       .group {
         width: auto;
         max-width: 100%;
@@ -173,7 +175,6 @@
       <textarea id="students" placeholder="Student 1&#10;Student 2&#10;Student 3"></textarea>
       <div id="nameCount">Students: 0</div>
       <br />
-
       <div class="options">
         <label>
           <input type="radio" name="layout" value="grid" checked>
@@ -184,23 +185,18 @@
           Groups
         </label>
       </div>
-
       <div id="grid-options" class="extra-input">
         <label>Rows: <input type="number" id="rows" min="1" value="3"></label>
         <label>Columns: <input type="number" id="columns" min="1" value="4"></label>
       </div>
-
       <div id="group-options" class="extra-input" style="display:none;">
         <label>Group Size: <input type="number" id="groupSize" min="1" value="3"></label>
       </div>
-
       <button id="generate">Generate Seating Chart</button>
       <button id="printBtn">Print/Export</button>
     </div>
-
     <div id="chart" class="seating-chart"></div>
   </div>
-
   <script>
     // Update name counter on textarea input
     const studentTextarea = document.getElementById('students');
@@ -222,7 +218,6 @@
       gridOptions.style.display = layout === 'grid' ? 'block' : 'none';
       groupOptions.style.display = layout === 'groups' ? 'block' : 'none';
     }
-
     layoutRadios.forEach(radio => radio.addEventListener('change', updateOptions));
     updateOptions();
 
@@ -233,7 +228,6 @@
         alert('Please enter at least one student.');
         return;
       }
-
       // Shuffle students randomly
       students = students.sort(() => Math.random() - 0.5);
 
@@ -280,17 +274,17 @@
           seatsContainer.classList.add('group-seats');
 
           const start = g * groupSize;
-          const end = start + groupSize;
-          const groupStudents = students.slice(start, end);
-          groupStudents.forEach((student, idx) => {
+          const groupStudents = students.slice(start, start + groupSize);
+          for (let idx = 0; idx < groupSize; idx++) {
             const seatDiv = document.createElement('div');
             seatDiv.classList.add('seat');
             seatDiv.draggable = true;
             seatDiv.id = 'group-' + g + '-seat-' + idx;
-            seatDiv.textContent = student;
+            // Fill with student name if exists; otherwise, leave empty
+            seatDiv.textContent = groupStudents[idx] || '';
             addDragDropHandlers(seatDiv);
             seatsContainer.appendChild(seatDiv);
-          });
+          }
           groupDiv.appendChild(seatsContainer);
           chartDiv.appendChild(groupDiv);
         }
@@ -305,19 +299,16 @@
     }
 
     let draggedElement = null;
-
     function dragStart(e) {
       draggedElement = this;
       e.dataTransfer.effectAllowed = "move";
       e.dataTransfer.setData("text/plain", this.id);
       this.style.opacity = '0.4';
     }
-
     function dragOver(e) {
       e.preventDefault();
       return false;
     }
-
     function drop(e) {
       e.stopPropagation();
       if (draggedElement !== this) {
@@ -327,11 +318,9 @@
       }
       return false;
     }
-
     function dragEnd(e) {
       this.style.opacity = '1';
     }
-
     document.getElementById('printBtn').addEventListener('click', () => {
       window.print();
     });
