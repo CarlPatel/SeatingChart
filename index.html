@@ -100,11 +100,12 @@
     }
 
     .seating-chart {
-      margin: 20px auto 0;
-      display: flex;
-      flex-wrap: wrap;
+      display: grid;
       gap: 10px;
       justify-content: center;
+      margin: 20px auto 0;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
     }
 
     .seat {
@@ -244,16 +245,18 @@
         </label>
       </div>
       <div id="grid-options" class="extra-input">
-        <label>Rows: <input type="number" id="rows" min="1" value="3"></label>
-        <label>Columns: <input type="number" id="columns" min="1" value="4"></label>
+        <label>Rows: <input type="number" id="rows" min="1" value="4"></label>
+        <label>Columns: <input type="number" id="columns" min="1" value="5"></label>
       </div>
       <div id="group-options" class="extra-input" style="display:none;">
-        <label>Group Size: <input type="number" id="groupSize" min="1" value="3"></label>
+        <label>Group Size: <input type="number" id="groupSize" min="1" value="4"></label>
       </div>
       <button id="generate">Generate Seating Chart</button>
       <button id="printBtn">Print/Export</button>
     </div>
-    <div id="chart" class="seating-chart"></div>
+    <div style="overflow-x: auto;">
+      <div id="chart" class="seating-chart"></div>
+    </div>
   </div>
   <script>
     // Update name counter on textarea input
@@ -302,6 +305,15 @@
           alert("Error: There are " + extra + " more student(s) than available seats.");
           return;
         }
+
+        // Set up CSS Grid for seating chart
+        chartDiv.style.display = 'grid';
+        chartDiv.style.gridTemplateColumns = `repeat(${cols}, 100px)`;
+        chartDiv.style.justifyContent = 'center';
+        chartDiv.style.overflowX = 'auto';
+        chartDiv.style.maxWidth = '100%';
+        chartDiv.style.margin = '20px auto 0';
+
         for (let i = 0; i < totalSeats; i++) {
           const seatDiv = document.createElement('div');
           seatDiv.classList.add('seat');
@@ -311,12 +323,16 @@
           addDragDropHandlers(seatDiv);
           chartDiv.appendChild(seatDiv);
         }
-        chartDiv.style.maxWidth = (cols * 110) + 'px';
-        chartDiv.style.margin = "20px auto 0";
       } else if (layout === 'groups') {
-        // Reset grid-specific inline styles
-        chartDiv.style.maxWidth = "";
-        chartDiv.style.margin = "";
+        // RESET any grid styles from previous layout
+        chartDiv.style.display = 'flex';
+        chartDiv.style.flexWrap = 'wrap';
+        chartDiv.style.gridTemplateColumns = '';
+        chartDiv.style.overflowX = '';
+        chartDiv.style.justifyContent = 'center';
+        chartDiv.style.maxWidth = '';
+        chartDiv.style.margin = '20px auto 0';
+
         const groupSize = parseInt(document.getElementById('groupSize').value);
         const totalGroups = Math.ceil(students.length / groupSize);
         for (let g = 0; g < totalGroups; g++) {
@@ -327,7 +343,6 @@
           header.textContent = 'Group ' + (g + 1);
           groupDiv.appendChild(header);
 
-          // Vertical container for group seats
           const seatsContainer = document.createElement('div');
           seatsContainer.classList.add('group-seats');
 
@@ -338,11 +353,11 @@
             seatDiv.classList.add('seat');
             seatDiv.draggable = true;
             seatDiv.id = 'group-' + g + '-seat-' + idx;
-            // Fill with student name if exists; otherwise, leave empty
             seatDiv.textContent = groupStudents[idx] || '';
             addDragDropHandlers(seatDiv);
             seatsContainer.appendChild(seatDiv);
           }
+
           groupDiv.appendChild(seatsContainer);
           chartDiv.appendChild(groupDiv);
         }
