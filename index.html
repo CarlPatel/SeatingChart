@@ -89,7 +89,7 @@
       color: #fff;
       border: none;
       padding: 10px 20px;
-      margin: 10px 5px 0 0;
+      margin: 10px 5px;
       border-radius: 4px;
       cursor: pointer;
       font-size: 1em;
@@ -160,6 +160,81 @@
       align-items: center;
     }
 
+    /* Modal overlay */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; z-index: 9999; }
+    .modal { background: #fff; border-radius: 8px; padding: 16px; width: min(700px, 90vw); max-height: 80vh; overflow: auto; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
+    .modal h2 { margin: 0 0 10px; font-size: 1.5rem; color: #333; }
+    .student-row { display: grid; grid-template-columns: 1fr 120px 120px; gap: 8px; align-items: center; padding: 6px 0; border-bottom: 1px solid #eee; }
+    .student-row input[type="text"] { width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 4px; }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+    .muted { color: #666; font-size: 0.9em; }
+    .add-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-top: 6px; align-items: stretch; }
+
+    /* Modal input styling */
+    .modal input[type="text"],
+    .modal input[type="search"],
+    .modal input[type="email"],
+    .modal input[type="number"],
+    .modal textarea {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 8px 10px;
+      border: 1px solid #cfcfcf;
+      border-radius: 6px;
+      background: #fafafa;
+      font-size: 14px;
+      line-height: 1.3;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+    }
+
+    /* Ensure inputs match button height and keep buttons inline */
+    .modal input[type="text"],
+    .modal input[type="search"],
+    .modal input[type="email"],
+    .modal input[type="number"] {
+      height: 40px;
+    }
+    .modal button {
+      width: auto !important;
+      display: inline-flex !important;
+      align-items: center;
+      justify-content: center;
+      height: 40px;
+      padding: 0 16px;
+      white-space: nowrap;
+    }
+
+    .modal input[type="text"]::placeholder,
+    .modal textarea::placeholder {
+      color: #9aa0a6;
+    }
+
+    .modal input[type="text"]:focus,
+    .modal input[type="search"]:focus,
+    .modal input[type="email"]:focus,
+    .modal input[type="number"]:focus,
+    .modal textarea:focus {
+      outline: none;
+      border-color: #61b5e3;
+      background: #fff;
+      box-shadow: 0 0 0 3px rgba(97, 181, 227, 0.25);
+    }
+
+    /* Compact inputs inside list rows */
+    .student-row input[type="text"] {
+      padding: 6px 8px;
+      font-size: 14px;
+      background: #fff;
+    }
+
+    /* Add-row input sizing */
+    .add-row input[type="text"] {
+      padding: 8px 10px;
+      font-size: 14px;
+      background: #fff;
+      align-self: center;
+    }
+
     @media print {
       .no-print {
         display: none;
@@ -179,6 +254,8 @@
       .container {
         box-shadow: none;
       }
+      /* Hide Manage Students button when printing */
+      #manageBtn { display: none !important; }
     }
 
     @media (max-width: 768px) {
@@ -223,6 +300,9 @@
         margin: 10px auto;
         display: block;
       }
+      /* Keep modal controls on a single row on mobile */
+      .modal button { width: auto; display: inline-flex; }
+      .add-row { grid-template-columns: 1fr auto; }
     }
   </style>
 </head>
@@ -258,9 +338,26 @@
       <button id="loadBtn">Load</button>
       <input type="file" id="loadFile" accept="application/json" style="display:none" />
     </div>
-    <div id="classTitle" class="class-title" contenteditable="true" title="Click to edit class name">Class Name</div>
+    <div id="classTitle" class="class-title" contenteditable="true" title="Click to edit class name" style="display:none;">Class Name</div>
     <div style="overflow-x: auto;">
       <div id="chart" class="seating-chart"></div>
+    </div>
+    <button id="manageBtn" style="display:none;">Manage Individual Students</button>
+
+    <!-- Student Manager Modal -->
+    <div id="studentModal" class="modal-overlay">
+      <div class="modal">
+        <h2>Manage Students </h2>
+        <span class="muted">add/rename/delete without reshuffling</span>
+        <div id="studentList"></div>
+        <div class="add-row">
+          <input id="addStudentInput" type="text" placeholder="Add a student" />
+          <button id="addStudentBtn" type="button">Add Student</button>
+        </div>
+        <div class="modal-actions">
+          <button id="closeStudentModal" type="button">Close</button>
+        </div>
+      </div>
     </div>
   </div>
   <script>
@@ -275,6 +372,16 @@
       nameCountDiv.textContent = "Students: " + names.length;
     });
 
+    function refreshNameCount() {
+      const names = studentTextarea.value
+        .split('\n')
+        .map(s => s.trim())
+        .filter(Boolean);
+      nameCountDiv.textContent = 'Students: ' + names.length;
+    }
+    // Set initial count on load
+    refreshNameCount();
+
     const layoutRadios = document.getElementsByName('layout');
     const gridOptions = document.getElementById('grid-options');
     const groupOptions = document.getElementById('group-options');
@@ -287,90 +394,273 @@
     layoutRadios.forEach(radio => radio.addEventListener('change', updateOptions));
     updateOptions();
 
-
-    document.getElementById('generate').addEventListener('click', () => {
-      const studentInput = studentTextarea.value;
-      let students = studentInput.split('\n').map(s => s.trim()).filter(s => s !== "");
-      if (students.length === 0) {
-        alert('Please enter at least one student.');
-        return;
-      }
-      // Shuffle students randomly
-      students = students.sort(() => Math.random() - 0.5);
-
-      const layout = document.querySelector('input[name="layout"]:checked').value;
+    // --- Helpers: currentLayout and appendNewGroupWithSize ---
+    function currentLayout() {
+      return document.querySelector('input[name="layout"]:checked').value;
+    }
+    function appendNewGroupWithSize(size) {
       const chartDiv = document.getElementById('chart');
-      chartDiv.innerHTML = '';
+      const existing = chartDiv.querySelectorAll('.group').length;
+      const groupIndex = existing; // zero-based
 
-      if (layout === 'grid') {
-        const rows = parseInt(document.getElementById('rows').value);
-        const cols = parseInt(document.getElementById('columns').value);
-        const totalSeats = rows * cols;
-        if (students.length > totalSeats) {
-          const extra = students.length - totalSeats;
-          alert("Error: There are " + extra + " more student(s) than available seats.");
-          return;
-        }
+      const groupDiv = document.createElement('div');
+      groupDiv.classList.add('group');
 
-        // Set up CSS Grid for seating chart
-        chartDiv.style.display = 'grid';
-        chartDiv.style.gridTemplateColumns = `repeat(${cols}, 100px)`;
-        chartDiv.style.justifyContent = 'center';
-        chartDiv.style.overflowX = 'auto';
-        chartDiv.style.maxWidth = '100%';
-        chartDiv.style.margin = '20px auto 0';
+      const header = document.createElement('div');
+      header.classList.add('group-title');
+      header.textContent = 'Group ' + (groupIndex + 1);
+      header.contentEditable = 'true';
+      header.title = 'Click to rename the group title';
+      groupDiv.appendChild(header);
 
-        for (let i = 0; i < totalSeats; i++) {
-          const seatDiv = document.createElement('div');
-          seatDiv.classList.add('seat');
-          seatDiv.draggable = true;
-          seatDiv.id = 'seat-' + i;
-          seatDiv.textContent = students[i] || '';
-          addDragDropHandlers(seatDiv);
-          chartDiv.appendChild(seatDiv);
-        }
-      } else if (layout === 'groups') {
-        // RESET any grid styles from previous layout
-        chartDiv.style.display = 'flex';
-        chartDiv.style.flexWrap = 'wrap';
-        chartDiv.style.gridTemplateColumns = '';
-        chartDiv.style.overflowX = '';
-        chartDiv.style.justifyContent = 'center';
-        chartDiv.style.maxWidth = '';
-        chartDiv.style.margin = '20px auto 0';
-
-        const groupSize = parseInt(document.getElementById('groupSize').value);
-        const totalGroups = Math.ceil(students.length / groupSize);
-        for (let g = 0; g < totalGroups; g++) {
-          const groupDiv = document.createElement('div');
-          groupDiv.classList.add('group');
-          const header = document.createElement('div');
-          header.classList.add('group-title');
-          header.textContent = 'Group ' + (g + 1);
-          header.contentEditable = 'true';
-          header.title = 'Click to rename the group title';
-          groupDiv.appendChild(header);
-
-          const seatsContainer = document.createElement('div');
-          seatsContainer.classList.add('group-seats');
-
-          const start = g * groupSize;
-          const groupStudents = students.slice(start, start + groupSize);
-          for (let idx = 0; idx < groupSize; idx++) {
-            const seatDiv = document.createElement('div');
-            seatDiv.classList.add('seat');
-            seatDiv.draggable = true;
-            seatDiv.id = 'group-' + g + '-seat-' + idx;
-            seatDiv.textContent = groupStudents[idx] || '';
-            addDragDropHandlers(seatDiv);
-            seatsContainer.appendChild(seatDiv);
-          }
-
-          groupDiv.appendChild(seatsContainer);
-          chartDiv.appendChild(groupDiv);
-        }
+      const seatsContainer = document.createElement('div');
+      seatsContainer.classList.add('group-seats');
+      for (let i = 0; i < size; i++) {
+        const seatDiv = document.createElement('div');
+        seatDiv.classList.add('seat');
+        seatDiv.draggable = true;
+        seatDiv.id = `group-${groupIndex}-seat-${i}`;
+        seatDiv.textContent = '';
+        addDragDropHandlers(seatDiv);
+        seatsContainer.appendChild(seatDiv);
       }
-    });
+      groupDiv.appendChild(seatsContainer);
+      chartDiv.appendChild(groupDiv);
+
+      // Return the first seat element of the new group for convenience
+      return seatsContainer.querySelector('.seat');
+    }
+
+    // --- Student Manager (modal) ---
+    const manageBtn = document.getElementById('manageBtn');
+    const modal = document.getElementById('studentModal');
+    const studentListDiv = document.getElementById('studentList');
+    const addStudentInput = document.getElementById('addStudentInput');
+    const addStudentBtn = document.getElementById('addStudentBtn');
+    const closeStudentModal = document.getElementById('closeStudentModal');
+
+    function openStudentModal() {
+      renderStudentManager();
+      modal.style.display = 'flex';
+    }
+    function closeStudentManager() {
+      modal.style.display = 'none';
+    }
+    if (manageBtn) manageBtn.addEventListener('click', openStudentModal);
+    if (closeStudentModal) closeStudentModal.addEventListener('click', closeStudentManager);
+    if (modal) modal.addEventListener('click', (e) => { if (e.target === modal) closeStudentManager(); });
+
+    function getSeatElements() {
+      return Array.from(document.querySelectorAll('#chart .seat'));
+    }
+    function getStudentsFromList() {
+      return studentTextarea.value
+        .split('\n')
+        .map(s => s.trim())
+        .filter(Boolean);
+    }
+
+    function replaceNameEverywhere(oldName, newName) {
+      if (!oldName || oldName === newName) return;
+      // Update chart seats
+      getSeatElements().forEach(seat => {
+        if ((seat.textContent || '').trim() === oldName) seat.textContent = newName;
+      });
+      // Update textarea: replace every exact line match
+      const lines = studentTextarea.value.split('\n');
+      const updated = lines.map(line => (line.trim() === oldName ? newName : line));
+      studentTextarea.value = updated.join('\n');
+      refreshNameCount();
+    }
+
+    function deleteNameEverywhere(name) {
+      if (!name) return;
+      // Clear matching seats
+      getSeatElements().forEach(seat => {
+        if ((seat.textContent || '').trim() === name) seat.textContent = '';
+      });
+      // Remove exact matches from textarea
+      const lines = studentTextarea.value.split('\n');
+      const remaining = lines.filter(line => line.trim() !== name);
+      studentTextarea.value = remaining.join('\n').replace(/\n+$/,'');
+      refreshNameCount();
+    }
+
+    function firstEmptySeat() {
+      const seats = getSeatElements();
+      for (let i = 0; i < seats.length; i++) {
+        const s = seats[i];
+        if (!s.textContent || !s.textContent.trim()) return s;
+      }
+      return undefined;
+    }
+
+    function renderStudentManager() {
+      const names = getStudentsFromList();
+      // Unique with counts for a clean list
+      const counts = new Map();
+      names.forEach(n => counts.set(n, (counts.get(n) || 0) + 1));
+      const rows = Array.from(counts.entries()).sort((a,b) => a[0].localeCompare(b[0]));
+
+      studentListDiv.innerHTML = '';
+      if (!rows.length) {
+        const empty = document.createElement('div');
+        empty.className = 'muted';
+        empty.textContent = 'No students placed yet. Add students below or generate a chart.';
+        studentListDiv.appendChild(empty);
+      } else {
+        rows.forEach(([name, count]) => {
+          const row = document.createElement('div');
+          row.className = 'student-row';
+          const input = document.createElement('input');
+          input.type = 'text';
+          input.value = name;
+          input.placeholder = 'Rename student';
+          const renameBtn = document.createElement('button');
+          renameBtn.textContent = 'Rename';
+          const delBtn = document.createElement('button');
+          delBtn.textContent = `Delete${count>1?` (${count})`:''}`;
+
+          renameBtn.addEventListener('click', () => {
+            const newName = (input.value || '').trim();
+            if (!newName) return;
+            replaceNameEverywhere(name, newName);
+            renderStudentManager();
+          });
+          delBtn.addEventListener('click', () => {
+            deleteNameEverywhere(name);
+            renderStudentManager();
+          });
+
+          const label = document.createElement('div');
+          label.textContent = `${name} ${count>1?`(x${count})`:''}`;
+          // Replace label with input for clearer UX
+          row.appendChild(input);
+          row.appendChild(renameBtn);
+          row.appendChild(delBtn);
+          studentListDiv.appendChild(row);
+        });
+      }
+    }
+
+    if (addStudentBtn) {
+      addStudentBtn.addEventListener('click', () => {
+        const n = (addStudentInput.value || '').trim();
+        if (!n) return;
+
+        // Try to find an empty seat first (top-left to bottom-right)
+        let empty = firstEmptySeat();
+        if (!empty) {
+          const layout = currentLayout();
+          if (layout === 'groups') {
+            // Auto-grow: add a new group and use its first seat
+            const size = parseInt(document.getElementById('groupSize').value) || 4;
+            empty = appendNewGroupWithSize(size);
+          } else {
+            alert('Error: There are more students than available seats.\nIncrease rows/columns and Generate again.');
+            return;
+          }
+        }
+
+        // Update textarea list and count
+        const current = studentTextarea.value.trim();
+        studentTextarea.value = current ? (current + '\n' + n) : n;
+        refreshNameCount();
+
+        // Place the student
+        empty.textContent = n;
+        addStudentInput.value = '';
+        renderStudentManager();
+      });
+    }
+
+
+document.getElementById('generate').addEventListener('click', () => {
+  const studentInput = studentTextarea.value;
+  let students = studentInput.split('\n').map(s => s.trim()).filter(s => s !== "");
+  if (students.length === 0) {
+    alert('Please enter at least one student.');
+    return;
+  }
+  // Shuffle students randomly
+  students = students.sort(() => Math.random() - 0.5);
+
+  const layout = document.querySelector('input[name="layout"]:checked').value;
+  const chartDiv = document.getElementById('chart');
+  chartDiv.innerHTML = '';
+  if (manageBtn) manageBtn.style.display = 'inline-block';
+  const classTitleEl = document.getElementById('classTitle');
+  if (classTitleEl) classTitleEl.style.display = 'block';
+
+  if (layout === 'grid') {
+    const rows = parseInt(document.getElementById('rows').value);
+    const cols = parseInt(document.getElementById('columns').value);
+    const totalSeats = rows * cols;
+    if (students.length > totalSeats) {
+      const extra = students.length - totalSeats;
+      alert("Error: There are " + extra + " more student(s) than available seats.");
+      return;
+    }
+
+    // Set up CSS Grid for seating chart
+    chartDiv.style.display = 'grid';
+    chartDiv.style.gridTemplateColumns = `repeat(${cols}, 100px)`;
+    chartDiv.style.justifyContent = 'center';
+    chartDiv.style.overflowX = 'auto';
+    chartDiv.style.maxWidth = '100%';
+    chartDiv.style.margin = '20px auto 0';
+
+    for (let i = 0; i < totalSeats; i++) {
+      const seatDiv = document.createElement('div');
+      seatDiv.classList.add('seat');
+      seatDiv.draggable = true;
+      seatDiv.id = 'seat-' + i;
+      seatDiv.textContent = students[i] || '';
+      addDragDropHandlers(seatDiv);
+      chartDiv.appendChild(seatDiv);
+    }
+  } else if (layout === 'groups') {
+    // RESET any grid styles from previous layout
+    chartDiv.style.display = 'flex';
+    chartDiv.style.flexWrap = 'wrap';
+    chartDiv.style.gridTemplateColumns = '';
+    chartDiv.style.overflowX = '';
+    chartDiv.style.justifyContent = 'center';
+    chartDiv.style.maxWidth = '';
+    chartDiv.style.margin = '20px auto 0';
+
+    const groupSize = parseInt(document.getElementById('groupSize').value);
+    const totalGroups = Math.ceil(students.length / groupSize);
+    for (let g = 0; g < totalGroups; g++) {
+      const groupDiv = document.createElement('div');
+      groupDiv.classList.add('group');
+      const header = document.createElement('div');
+      header.classList.add('group-title');
+      header.textContent = 'Group ' + (g + 1);
+      header.contentEditable = 'true';
+      header.title = 'Click to rename the group title';
+      groupDiv.appendChild(header);
+
+      const seatsContainer = document.createElement('div');
+      seatsContainer.classList.add('group-seats');
+
+      const start = g * groupSize;
+      const groupStudents = students.slice(start, start + groupSize);
+      for (let idx = 0; idx < groupSize; idx++) {
+        const seatDiv = document.createElement('div');
+        seatDiv.classList.add('seat');
+        seatDiv.draggable = true;
+        seatDiv.id = 'group-' + g + '-seat-' + idx;
+        seatDiv.textContent = groupStudents[idx] || '';
+        addDragDropHandlers(seatDiv);
+        seatsContainer.appendChild(seatDiv);
+      }
+
+      groupDiv.appendChild(seatsContainer);
+      chartDiv.appendChild(groupDiv);
+    }
+  }
+});
 
     function addDragDropHandlers(el) {
       el.addEventListener('dragstart', dragStart);
