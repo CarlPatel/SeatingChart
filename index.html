@@ -394,6 +394,145 @@
     layoutRadios.forEach(radio => radio.addEventListener('change', updateOptions));
     updateOptions();
 
+    // --- Live update state ---
+    let chartGenerated = false;
+    let lastLayout = null;
+    let lastGridRows = null;
+    let lastGridCols = null;
+    let lastGroupSize = null;
+
+    function chartHasSeats() {
+      return document.querySelectorAll('#chart .seat').length > 0;
+    }
+
+    function getSeatTextsInDOMOrder() {
+      return Array.from(document.querySelectorAll('#chart .seat')).map(s => s.textContent || '');
+    }
+
+    function rebuildGridPreservingOrder(newRows, newCols) {
+      const chartDiv = document.getElementById('chart');
+      const existing = getSeatTextsInDOMOrder();
+      const total = newRows * newCols;
+
+      // Apply grid styles
+      chartDiv.style.display = 'grid';
+      chartDiv.style.gridTemplateColumns = `repeat(${newCols}, 100px)`;
+      chartDiv.style.justifyContent = 'center';
+      chartDiv.style.overflowX = 'auto';
+      chartDiv.style.maxWidth = '100%';
+      chartDiv.style.margin = '20px auto 0';
+
+      // Rebuild DOM
+      chartDiv.innerHTML = '';
+      for (let i = 0; i < total; i++) {
+        const seatDiv = document.createElement('div');
+        seatDiv.classList.add('seat');
+        seatDiv.draggable = true;
+        seatDiv.id = 'seat-' + i;
+        seatDiv.textContent = existing[i] || '';
+        addDragDropHandlers(seatDiv);
+        chartDiv.appendChild(seatDiv);
+      }
+      lastGridRows = newRows;
+      lastGridCols = newCols;
+    }
+
+    function updateGroupsForSize(newSize) {
+      const chartDiv = document.getElementById('chart');
+      const groups = Array.from(chartDiv.querySelectorAll('.group'));
+      let overflow = [];
+
+      groups.forEach((group, gidx) => {
+        const seatsContainer = group.querySelector('.group-seats');
+        const seats = Array.from(seatsContainer.querySelectorAll('.seat'));
+        const currentSize = seats.length;
+        if (currentSize < newSize) {
+          // add blanks at bottom
+          for (let i = currentSize; i < newSize; i++) {
+            const seatDiv = document.createElement('div');
+            seatDiv.classList.add('seat');
+            seatDiv.draggable = true;
+            seatDiv.id = `group-${gidx}-seat-${i}`;
+            seatDiv.textContent = '';
+            addDragDropHandlers(seatDiv);
+            seatsContainer.appendChild(seatDiv);
+          }
+        } else if (currentSize > newSize) {
+          // collect overflow names and remove extra seat elements
+          for (let i = newSize; i < currentSize; i++) {
+            const s = seats[i];
+            const name = (s.textContent || '').trim();
+            if (name) overflow.push(name);
+            seatsContainer.removeChild(s);
+          }
+        }
+      });
+
+      // First, distribute overflow into existing empty seats across all groups (in DOM order)
+      if (overflow.length > 0) {
+        const emptySeats = Array.from(chartDiv.querySelectorAll('.group .group-seats .seat'))
+          .filter(s => !((s.textContent || '').trim()));
+        for (let i = 0; i < emptySeats.length && overflow.length > 0; i++) {
+          emptySeats[i].textContent = overflow.shift();
+        }
+      }
+      // Create new group(s) for any overflow, filling top-down
+      if (overflow.length > 0) {
+        while (overflow.length > 0) {
+          const firstSeat = appendNewGroupWithSize(newSize);
+          const newGroup = firstSeat.closest('.group');
+          const seats = Array.from(newGroup.querySelectorAll('.seat'));
+          for (let i = 0; i < seats.length; i++) {
+            seats[i].textContent = overflow.shift() || '';
+            if (overflow.length === 0) break;
+          }
+        }
+      }
+
+      lastGroupSize = newSize;
+    }
+
+    // --- Live update listeners ---
+    const rowsInput = document.getElementById('rows');
+    const colsInput = document.getElementById('columns');
+    const groupSizeInput = document.getElementById('groupSize');
+
+    if (rowsInput) rowsInput.addEventListener('change', () => {
+      if (!chartGenerated || currentLayout() !== 'grid' || !chartHasSeats()) return;
+      const r = Math.max(1, parseInt(rowsInput.value) || 1);
+      const c = Math.max(1, parseInt(colsInput.value) || 1);
+      const filled = countFilledSeats();
+      if (r * c < filled) {
+        alert(`Cannot set grid to ${r}x${c}: ${filled} students are already placed.`);
+        // revert to last valid values
+        if (lastGridRows != null) rowsInput.value = lastGridRows;
+        if (lastGridCols != null) colsInput.value = lastGridCols;
+        return;
+      }
+      rebuildGridPreservingOrder(r, c);
+    });
+
+    if (colsInput) colsInput.addEventListener('change', () => {
+      if (!chartGenerated || currentLayout() !== 'grid' || !chartHasSeats()) return;
+      const r = Math.max(1, parseInt(rowsInput.value) || 1);
+      const c = Math.max(1, parseInt(colsInput.value) || 1);
+      const filled = countFilledSeats();
+      if (r * c < filled) {
+        alert(`Cannot set grid to ${r}x${c}: ${filled} students are already placed.`);
+        // revert to last valid values
+        if (lastGridRows != null) rowsInput.value = lastGridRows;
+        if (lastGridCols != null) colsInput.value = lastGridCols;
+        return;
+      }
+      rebuildGridPreservingOrder(r, c);
+    });
+
+    if (groupSizeInput) groupSizeInput.addEventListener('change', () => {
+      if (!chartGenerated || currentLayout() !== 'groups' || !chartHasSeats()) return;
+      const size = Math.max(1, parseInt(groupSizeInput.value) || 1);
+      updateGroupsForSize(size);
+    });
+
     // --- Helpers: currentLayout and appendNewGroupWithSize ---
     function currentLayout() {
       return document.querySelector('input[name="layout"]:checked').value;
@@ -452,6 +591,9 @@
 
     function getSeatElements() {
       return Array.from(document.querySelectorAll('#chart .seat'));
+    }
+    function countFilledSeats() {
+      return getSeatElements().filter(s => (s.textContent || '').trim()).length;
     }
     function getStudentsFromList() {
       return studentTextarea.value
@@ -619,6 +761,11 @@ document.getElementById('generate').addEventListener('click', () => {
       addDragDropHandlers(seatDiv);
       chartDiv.appendChild(seatDiv);
     }
+    // --- set live update state ---
+    chartGenerated = true;
+    lastLayout = 'grid';
+    lastGridRows = rows;
+    lastGridCols = cols;
   } else if (layout === 'groups') {
     // RESET any grid styles from previous layout
     chartDiv.style.display = 'flex';
@@ -659,6 +806,10 @@ document.getElementById('generate').addEventListener('click', () => {
       groupDiv.appendChild(seatsContainer);
       chartDiv.appendChild(groupDiv);
     }
+    // --- set live update state ---
+    chartGenerated = true;
+    lastLayout = 'groups';
+    lastGroupSize = groupSize;
   }
 });
 
@@ -789,6 +940,11 @@ document.getElementById('generate').addEventListener('click', () => {
           addDragDropHandlers(seatDiv);
           chartDiv.appendChild(seatDiv);
         }
+        // --- set live update state ---
+        chartGenerated = true;
+        lastLayout = 'grid';
+        lastGridRows = rows;
+        lastGridCols = cols;
       } else {
         chartDiv.style.display = 'flex';
         chartDiv.style.flexWrap = 'wrap';
@@ -833,6 +989,10 @@ document.getElementById('generate').addEventListener('click', () => {
           groupDiv.appendChild(seatsContainer);
           chartDiv.appendChild(groupDiv);
         });
+        // --- set live update state ---
+        chartGenerated = true;
+        lastLayout = 'groups';
+        lastGroupSize = sizeToUse;
       }
     }
 
