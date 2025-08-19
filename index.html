@@ -144,6 +144,13 @@
       margin-bottom: 5px;
     }
 
+    .class-title {
+      font-size: 1.4em;
+      font-weight: 700;
+      margin: 30px 0 0;
+      text-align: center;
+    }
+
     /* Vertical layout for seats within a group */
     .group-seats {
       display: flex;
@@ -247,7 +254,11 @@
       </div>
       <button id="generate">Generate Seating Chart</button>
       <button id="printBtn">Print/Export</button>
+      <button id="saveBtn">Save</button>
+      <button id="loadBtn">Load</button>
+      <input type="file" id="loadFile" accept="application/json" style="display:none" />
     </div>
+    <div id="classTitle" class="class-title" contenteditable="true" title="Click to edit class name">Class Name</div>
     <div style="overflow-x: auto;">
       <div id="chart" class="seating-chart"></div>
     </div>
@@ -275,6 +286,7 @@
     }
     layoutRadios.forEach(radio => radio.addEventListener('change', updateOptions));
     updateOptions();
+
 
     document.getElementById('generate').addEventListener('click', () => {
       const studentInput = studentTextarea.value;
@@ -335,6 +347,8 @@
           const header = document.createElement('div');
           header.classList.add('group-title');
           header.textContent = 'Group ' + (g + 1);
+          header.contentEditable = 'true';
+          header.title = 'Click to rename the group title';
           groupDiv.appendChild(header);
 
           const seatsContainer = document.createElement('div');
@@ -391,6 +405,233 @@
     document.getElementById('printBtn').addEventListener('click', () => {
       window.print();
     });
+
+    // --- Save/Load support (File-based with schema) ---
+    const SCHEMA_ID = 'seatingchart.v1';
+
+    function buildStateFromDOM() {
+      const layout = document.querySelector('input[name="layout"]:checked').value;
+      const studentsText = studentTextarea.value;
+      const titleEl = document.getElementById('classTitle');
+      const className = titleEl ? titleEl.textContent.trim() : '';
+      const state = { layout, studentsText, className, timestamp: Date.now() };
+
+      const chartDiv = document.getElementById('chart');
+
+      if (layout === 'grid') {
+        const rows = parseInt(document.getElementById('rows').value);
+        const cols = parseInt(document.getElementById('columns').value);
+        const seats = Array.from(chartDiv.querySelectorAll('.seat')).map(s => s.textContent.trim());
+        Object.assign(state, { rows, cols, seats });
+      } else {
+        const groupSizeVal = parseInt(document.getElementById('groupSize').value);
+        const groupNodes = Array.from(chartDiv.querySelectorAll('.group'));
+        const groups = groupNodes.map(group => {
+          const titleEl = group.querySelector('.group-title');
+          const title = titleEl ? titleEl.textContent : '';
+          const seats = Array.from(group.querySelectorAll('.group-seats .seat')).map(s => s.textContent.trim());
+          return { title, seats };
+        });
+        Object.assign(state, { groupSize: groupSizeVal, groups});
+      }
+      return state;
+    }
+
+    function stateForSave() {
+      const core = buildStateFromDOM();
+      // Embed schema id so a future loader can validate/infer
+      return { schema: SCHEMA_ID, ...core };
+    }
+
+    function clearChart() {
+      const chartDiv = document.getElementById('chart');
+      chartDiv.innerHTML = '';
+    }
+
+    function renderFromState(state) {
+      if (!state) return;
+
+      // If schema missing, try to infer
+      const layout = state.layout || (Array.isArray(state.groups) ? 'groups' : 'grid');
+      state.layout = layout;
+
+      // Restore textarea text for convenience (does not affect rendering)
+      if (typeof state.studentsText === 'string') {
+        studentTextarea.value = state.studentsText;
+        const names = state.studentsText.split('\n').map(s => s.trim()).filter(Boolean);
+        nameCountDiv.textContent = 'Students: ' + names.length;
+      }
+
+      // Set layout radio and show proper options
+      const layoutRadio = document.querySelector(`input[name="layout"][value="${layout}"]`);
+      if (layoutRadio) layoutRadio.checked = true;
+      updateOptions();
+
+      const chartDiv = document.getElementById('chart');
+      clearChart();
+      const titleEl = document.getElementById('classTitle');
+      if (titleEl && typeof state.className === 'string' && state.className.trim() !== '') {
+        titleEl.textContent = state.className.trim();
+      }
+
+      if (layout === 'grid') {
+        const rows = parseInt(state.rows) || 1;
+        const cols = parseInt(state.cols) || 1;
+
+        chartDiv.style.display = 'grid';
+        chartDiv.style.gridTemplateColumns = `repeat(${cols}, 100px)`;
+        chartDiv.style.justifyContent = 'center';
+        chartDiv.style.overflowX = 'auto';
+        chartDiv.style.maxWidth = '100%';
+        chartDiv.style.margin = '20px auto 0';
+
+        document.getElementById('rows').value = rows;
+        document.getElementById('columns').value = cols;
+
+        const totalSeats = rows * cols;
+        const seats = Array.isArray(state.seats) ? state.seats : [];
+        for (let i = 0; i < totalSeats; i++) {
+          const seatDiv = document.createElement('div');
+          seatDiv.classList.add('seat');
+          seatDiv.draggable = true;
+          seatDiv.id = 'seat-' + i;
+          seatDiv.textContent = seats[i] || '';
+          addDragDropHandlers(seatDiv);
+          chartDiv.appendChild(seatDiv);
+        }
+      } else {
+        chartDiv.style.display = 'flex';
+        chartDiv.style.flexWrap = 'wrap';
+        chartDiv.style.gridTemplateColumns = '';
+        chartDiv.style.overflowX = '';
+        chartDiv.style.justifyContent = 'center';
+        chartDiv.style.maxWidth = '';
+        chartDiv.style.margin = '20px auto 0';
+
+        const groups = Array.isArray(state.groups) ? state.groups : [];
+        // Restore (or infer) group size and update UI control accordingly
+        const inferredSize = (groups[0] && Array.isArray(groups[0].seats)) ? groups[0].seats.length : undefined;
+        const parsedSaved = parseInt(state.groupSize);
+        const sizeToUse = (!isNaN(parsedSaved) && parsedSaved > 0) ? parsedSaved : (inferredSize || parseInt(document.getElementById('groupSize').value) || 4);
+        document.getElementById('groupSize').value = sizeToUse;
+
+        groups.forEach((g, idx) => {
+          const groupDiv = document.createElement('div');
+          groupDiv.classList.add('group');
+
+          const header = document.createElement('div');
+          header.classList.add('group-title');
+          header.textContent = (g && typeof g.title === 'string' && g.title.trim() !== '') ? g.title : ('Group ' + (idx + 1));
+          header.contentEditable = 'true';
+          header.title = 'Click to rename the group title';
+          groupDiv.appendChild(header);
+
+          const seatsContainer = document.createElement('div');
+          seatsContainer.classList.add('group-seats');
+
+          const seats = Array.isArray(g && g.seats) ? g.seats : [];
+          for (let i = 0; i < sizeToUse; i++) {
+            const seatDiv = document.createElement('div');
+            seatDiv.classList.add('seat');
+            seatDiv.draggable = true;
+            seatDiv.id = `group-${idx}-seat-${i}`;
+            seatDiv.textContent = seats[i] || '';
+            addDragDropHandlers(seatDiv);
+            seatsContainer.appendChild(seatDiv);
+          }
+
+          groupDiv.appendChild(seatsContainer);
+          chartDiv.appendChild(groupDiv);
+        });
+      }
+    }
+
+    function downloadJSON(filename, dataObj) {
+      const blob = new Blob([JSON.stringify(dataObj, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    function buildTimestamp() {
+      const d = new Date();
+      const pad = n => String(n).padStart(2, '0');
+      const yyyy = d.getFullYear();
+      const mm = pad(d.getMonth() + 1);
+      const dd = pad(d.getDate());
+      const HH = pad(d.getHours());
+      const MM = pad(d.getMinutes());
+      const SS = pad(d.getSeconds());
+      return `${yyyy}-${mm}-${dd}_${HH}-${MM}-${SS}`;
+    }
+
+    function defaultFileName() {
+      const titleEl = document.getElementById('classTitle');
+      const raw = titleEl ? titleEl.textContent.trim() : '';
+      const isDefault = !raw || /^class name$/i.test(raw);
+      let base;
+      if (isDefault) {
+        base = `seating-chart_${buildTimestamp()}`;
+      } else {
+        base = `${raw}_seating-chart`;
+      }
+      const safe = base.replace(/[^a-z0-9-_]+/gi, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+      return `${safe}.json`;
+    }
+
+    // Buttons / File input
+    const saveBtn = document.getElementById('saveBtn');
+    const loadBtn = document.getElementById('loadBtn');
+    const loadFile = document.getElementById('loadFile');
+
+if (saveBtn) {
+  saveBtn.addEventListener('click', () => {
+    const state = stateForSave();
+    const fname = defaultFileName();
+    downloadJSON(fname, state);
+  });
+}
+
+    if (loadBtn && loadFile) {
+      loadBtn.addEventListener('click', () => {
+        loadFile.click();
+      });
+
+      loadFile.addEventListener('change', async (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+        try {
+          const text = await file.text();
+          const obj = JSON.parse(text);
+          if (obj.studentsText) {
+            studentTextarea.value = obj.studentsText;
+            const names = obj.studentsText.split('\n').map(s => s.trim()).filter(Boolean);
+            nameCountDiv.textContent = 'Students: ' + names.length;
+          }
+          if (typeof obj.className === 'string') {
+            const titleEl = document.getElementById('classTitle');
+            if (titleEl) titleEl.textContent = obj.className.trim() || 'Class Name';
+          }
+          // Validate schema loosely; if absent, attempt to infer
+          if (obj && (obj.schema === SCHEMA_ID || obj.layout || obj.groups || obj.seats)) {
+            renderFromState(obj);
+          } else {
+            alert('Unrecognized file format.');
+          }
+        } catch (err) {
+          console.error(err);
+          alert('Failed to read or parse that file.');
+        } finally {
+          // Reset input so same file can be loaded again if needed
+          e.target.value = '';
+        }
+      });
+    }
   </script>
 </body>
 
